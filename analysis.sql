@@ -1,11 +1,11 @@
--- Supply Chain Delay Analysis
--- Author: Clamencia Anthonyswamy
--- Dataset: 30 shipments across German cities, Jan-Mar 2024
--- Tool: SQLite
+-- supply chain delay analysis
+-- built this because i kept asking the same questions at work
+-- which carriers are causing delays and what is it actually costing?
+-- dataset is simulated but the patterns are based on real logistics work
+-- clamencia anthonyswamy | berlin | 2024
 
--- ============================================
--- CREATE TABLE
--- ============================================
+
+-- create table
 
 CREATE TABLE shipments (
   shipment_id INTEGER PRIMARY KEY,
@@ -20,9 +20,11 @@ CREATE TABLE shipments (
   shipment_value REAL
 );
 
--- ============================================
--- INSERT DATA
--- ============================================
+
+-- insert data
+-- 30 shipments across jan-mar 2024
+-- german cities: berlin, munich, hamburg, frankfurt, cologne
+-- carriers: dhl, dpd, hermes
 
 INSERT INTO shipments VALUES
 (1,'2024-01-03','2024-01-07','2024-01-05','Berlin','Munich','DHL','Delayed',2,1250.00),
@@ -56,47 +58,42 @@ INSERT INTO shipments VALUES
 (29,'2024-03-12','2024-03-18','2024-03-14','Berlin','Frankfurt','DPD','Delayed',4,1850.00),
 (30,'2024-03-15','2024-03-17','2024-03-17','Cologne','Frankfurt','DHL','On Time',0,530.00);
 
--- ============================================
--- QUERY 1: Overall Delivery Performance
--- Question: What is the overall on-time vs delayed split?
--- ============================================
 
-SELECT 
+-- first thing i wanted to know
+-- overall how bad is it?
+
+SELECT
   status,
   COUNT(*) as total_shipments,
-  ROUND(COUNT(*) * 100.0 / 
+  ROUND(COUNT(*) * 100.0 /
     (SELECT COUNT(*) FROM shipments), 1) as percentage
 FROM shipments
 GROUP BY status
 ORDER BY total_shipments DESC;
 
--- Result: 50% delayed, 50% on time
+-- 50% delayed. not great.
 
--- ============================================
--- QUERY 2: Carrier Performance
--- Question: Which carrier causes the most delays?
--- ============================================
 
-SELECT 
+-- which carrier is actually the problem?
+
+SELECT
   carrier,
   COUNT(*) as total_shipments,
   SUM(CASE WHEN status = 'Delayed' THEN 1 ELSE 0 END) as delayed,
   SUM(CASE WHEN status = 'On Time' THEN 1 ELSE 0 END) as on_time,
   ROUND(AVG(delay_days), 1) as avg_delay_days,
-  ROUND(SUM(CASE WHEN status = 'Delayed' THEN 1 ELSE 0 END) 
+  ROUND(SUM(CASE WHEN status = 'Delayed' THEN 1 ELSE 0 END)
     * 100.0 / COUNT(*), 1) as delay_rate_percent
 FROM shipments
 GROUP BY carrier
 ORDER BY delay_rate_percent DESC;
 
--- Result: Hermes highest delay rate
+-- hermes. always hermes.
 
--- ============================================
--- QUERY 3: Most Delayed Routes
--- Question: Which origin-destination pairs delay most?
--- ============================================
 
-SELECT 
+-- which routes keep showing up?
+
+SELECT
   origin,
   destination,
   COUNT(*) as total_shipments,
@@ -107,14 +104,13 @@ GROUP BY origin, destination
 HAVING COUNT(*) > 1
 ORDER BY avg_delay_days DESC;
 
--- Result: Berlin to Frankfurt consistently problematic
+-- berlin to frankfurt is consistently bad
+-- something about that route is not working
 
--- ============================================
--- QUERY 4: Monthly Trend
--- Question: Are delays getting better or worse?
--- ============================================
 
-SELECT 
+-- is it getting better or worse month by month?
+
+SELECT
   SUBSTR(shipment_date, 1, 7) as month,
   COUNT(*) as total_shipments,
   SUM(CASE WHEN status = 'Delayed' THEN 1 ELSE 0 END) as delayed,
@@ -124,24 +120,27 @@ FROM shipments
 GROUP BY month
 ORDER BY month;
 
--- Result: Volume dropped in March - worth monitoring
+-- march volume dropped to 7 from 12 in feb
+-- could be seasonal, could be something else
+-- need more data to know for sure
 
--- ============================================
--- QUERY 5: Financial Impact of Delays
--- Question: How much money is at risk per carrier?
--- ============================================
 
-SELECT 
+-- the one that matters most for the business
+-- actual money sitting in delayed shipments
+
+SELECT
   carrier,
-  ROUND(SUM(CASE WHEN status = 'Delayed' 
+  ROUND(SUM(CASE WHEN status = 'Delayed'
     THEN shipment_value ELSE 0 END), 2) as delayed_value,
   ROUND(SUM(shipment_value), 2) as total_value,
-  ROUND(SUM(CASE WHEN status = 'Delayed' 
-    THEN shipment_value ELSE 0 END) * 100.0 
+  ROUND(SUM(CASE WHEN status = 'Delayed'
+    THEN shipment_value ELSE 0 END) * 100.0
     / SUM(shipment_value), 1) as percent_value_at_risk
 FROM shipments
 GROUP BY carrier
 ORDER BY delayed_value DESC;
 
--- Result: Hermes = 16410 EUR at risk
--- Recommendation: Review Hermes contract immediately
+-- hermes: 16410 eur at risk
+-- dpd: 8900 eur
+-- dhl: 7800 eur
+-- if i were presenting this i would start with hermes
